@@ -234,8 +234,9 @@ class Network:
             with summary_writer.as_default():
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
-    def train_epoch(self, train, learning_rate, args):
+    def train_epoch(self, train, learning_rate, args, msg_prefix = ''):
         batches, at_least_one_epoch = 0, False
+        regular_batches, extra_batches = 0, 0
         while batches < args.min_epoch_batches:
             while not train.epoch_finished():
                 sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = train.next_batch(args.batch_size)
@@ -267,8 +268,16 @@ class Network:
                     feeds[self.deprels] = word_ids[train.DEPREL]
                 self.session.run([self.training, self.summaries["train"]], feeds)
                 batches += 1
+                if not at_least_one_epoch:
+                    regular_batches += 1
+                else:
+                    extra_batches += 1
+                sys.stdout.write('%s%d regular batches, %s extra batches, %d batches for this epoch\r' %(
+                    msg_prefix, regular_batches, extra_batches, batches
+                ))
                 if at_least_one_epoch: break
             at_least_one_epoch = True
+        sys.stdout.write('\n')
 
     def predict(self, dataset, evaluating, args):
         import io
@@ -452,9 +461,17 @@ if __name__ == "__main__":
     if dev:
         dev_conllu = conll18_ud_eval.load_conllu_file("{}-ud-dev.conllu".format(args.basename))
     test_conllu = conll18_ud_eval.load_conllu_file("{}-ud-test.conllu".format(args.basename))
+    total_epochs = 0
+    for epochs, learning_rate in args.epochs:
+        total_epochs += epochs
+    overall_epoch = 0
     for i, (epochs, learning_rate) in enumerate(args.epochs):
         for epoch in range(epochs):
-            network.train_epoch(train, learning_rate, args)
+            overall_epoch += 1
+            msg_prefix = 'Epoch %d of %d (%d of %d with learning rate %.6f): ' %(
+                overall_epoch, total_epochs, epoch+1, epochs, learning_rate
+            )
+            network.train_epoch(train, learning_rate, args, msg_prefix = msg_prefix)
 
             if dev:
                 dev_accuracy, metrics = network.evaluate("dev", dev, dev_conllu, args)
