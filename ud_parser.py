@@ -235,6 +235,8 @@ class Network:
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
     def train_epoch(self, train, learning_rate, args, msg_prefix = ''):
+        if args.reset_epoch_perm:
+            train.reset_perm()
         batches, at_least_one_epoch = 0, False
         regular_batches, extra_batches = 0, 0
         train.reset_sentence_usage_tracker()
@@ -377,6 +379,7 @@ if __name__ == "__main__":
     parser.add_argument("--exp", default=None, type=str, help="Experiment name.")
     parser.add_argument("--label_smoothing", default=0.03, type=float, help="Label smoothing.")
     parser.add_argument("--min_epoch_batches", default=300, type=int, help="Minimum number of batches per epoch.")
+    parser.add_argument("--reset_epoch_perm", default=False, action="store_true", help="Start each epoch with a fresh permutation.")
     parser.add_argument("--parse", default=1, type=int, help="Parse.")
     parser.add_argument("--parser_layers", default=1, type=int, help="Parser layers.")
     parser.add_argument("--parser_deprel_dim", default=128, type=int, help="Parser deprel dim.")
