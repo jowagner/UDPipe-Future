@@ -237,6 +237,7 @@ class Network:
     def train_epoch(self, train, learning_rate, args, msg_prefix = ''):
         batches, at_least_one_epoch = 0, False
         regular_batches, extra_batches = 0, 0
+        train.reset_sentence_usage_tracker()
         while batches < args.min_epoch_batches:
             while not train.epoch_finished():
                 sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = train.next_batch(args.batch_size)
@@ -278,6 +279,7 @@ class Network:
                 if at_least_one_epoch: break
             at_least_one_epoch = True
         sys.stdout.write('\n')
+        print('Sentence usage:', train.get_sentence_usage_frequencies())
 
     def predict(self, dataset, evaluating, args):
         import io

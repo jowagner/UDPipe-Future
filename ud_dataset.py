@@ -160,6 +160,7 @@ class UDDataset:
         self._extras = []
         self._lr_allow_copy = train._lr_allow_copy if train else None
         lemma_dict_with_copy, lemma_dict_no_copy = {}, {}
+        self.sentence_usage_counters = None
 
         # Prepare embeddings
         self._embeddings = {}
@@ -294,6 +295,21 @@ class UDDataset:
     def elmo_size(self):
         return self._elmo_size
 
+    def reset_sentence_usage_tracker(self):
+        self.sentence_usage_counters = []
+        for _ in self._sentence_lens:
+            self.sentence_usage_counters.append(0)
+
+    def get_sentence_usage_frequencies(self):
+        count2freq = {}
+        for count in self.sentence_usage_counters:
+            try:
+                freq = count2freq[count]
+            except KeyError:
+                freq = 0
+            count2freq[count] = freq + 1
+        return count2freq
+
     def epoch_finished(self):
         if len(self._permutation) == 0:
             self._permutation = np.random.permutation(len(self._sentence_lens)) if self._shuffle_batches else np.arange(len(self._sentence_lens))
@@ -304,6 +320,12 @@ class UDDataset:
         batch_size = min(batch_size, len(self._permutation))
         batch_perm = self._permutation[:batch_size]
         self._permutation = self._permutation[batch_size:]
+
+        # Track sentence usage (if requested with reset_sentence_usage_tracker())
+        if self.sentence_usage_counters is not None:
+            for i in range(batch_size):
+                sent_index = batch_perm[i]
+                self.sentence_usage_counters[sent_index] += 1
 
         # General data
         batch_sentence_lens = self._sentence_lens[batch_perm]
