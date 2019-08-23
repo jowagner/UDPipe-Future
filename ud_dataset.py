@@ -105,8 +105,9 @@ class UDDataset:
     DEPREL = 6
     DEPS = 7
     MISC = 8
-    FACTORS = 9
-    EMBEDDINGS = 9
+    FACTORS = 9    # the number of factors, i.e. columns in the conllu format excluding the ID column
+                   # (The factor numbers above must be in range(FACTORS).)
+    EMBEDDINGS = 9 # index in word_ids of factors
     ELMO = 10
 
     FACTORS_MAP = {"FORMS": FORMS, "LEMMAS": LEMMAS, "UPOS": UPOS, "XPOS": XPOS, "FEATS": FEATS,
@@ -116,25 +117,46 @@ class UDDataset:
 
     class _Factor:
         ROOT = 2
-        def __init__(self, with_root, characters, train=None):
+        def __init__(self, with_root, use_characters, train=None):
             self.words_map = train.words_map if train else {'<pad>': 0, '<unk>': 1, '<root>': 2}
             self.words = train.words if train else ['<pad>', '<unk>', '<root>']
             self.word_ids = []
             self.strings = []
-            self.with_root = with_root
-            self.characters = characters
-            if characters:
+            self.with_root = with_root   # true iff this factor is part of root_factors
+            self.use_characters = use_characters
+            if use_characters:
                 self.alphabet_map = train.alphabet_map if train else {'<pad>': 0, '<unk>': 1, '<root>': 2}
                 self.alphabet = train.alphabet if train else ['<pad>', '<unk>', '<root>']
                 self.charseqs_map = {'<pad>': 0, '<unk>': 1, '<root>': 2}
                 self.charseqs = [[0], [1], [2]]
                 self.charseq_ids = []
+        def __repr__(self):
+            tokens = []
+            tokens.append('<Factor')
+            tokens.append('with %d train words' %len(self.words))
+            tokens.append('and %d word_ids' %len(self.word_ids))
+            tokens.append('and %d strings' %len(self.strings))
+            if self.with_root:
+                tokens.append('and with root')
+            else:
+                tokens.append('and without root')
+            if self.use_characters:
+                tokens.append('and with %d characters' %len(self.charseqs))
+            else:
+                tokens.append('and without characters')
+            tokens.append('>')
+            return ' '.join(tokens)
 
     def __init__(self, filename, root_factors=[], embeddings=None, elmo=None, train=None, shuffle_batches=True, max_sentences=None):
         # Create factors
         self._factors = []
-        for f in range(self.FACTORS):
-            self._factors.append(self._Factor(f in root_factors, f == self.FORMS, train._factors[f] if train else None))
+        print('Factors:')
+        for f_index in range(self.FACTORS):
+            self._factors.append(self._Factor(
+                f_index in root_factors,  # usually [0]
+                f_index == self.FORMS,    # i.e. only use characters for the token column
+                train._factors[f_index] if train else None))
+            print('%4d: %r' %(f_index, self._factors[-1]))
         self._extras = []
         self._lr_allow_copy = train._lr_allow_copy if train else None
         lemma_dict_with_copy, lemma_dict_no_copy = {}, {}
@@ -166,9 +188,10 @@ class UDDataset:
 
                 if line:
                     if self.re_extras.match(line):
+                        # comment, multi-word token or other special token
                         if in_sentence:
                             while len(self._extras) < len(self._factors[0].word_ids): self._extras.append([])
-                            while len(self._extras[-1]) <= len(self._factors[0].word_ids[-1]) - self._factors[0].with_root:
+                            while len(self._extras[-1]) <= len(self._factors[0].word_ids[-1]) - self._factors[0].with_root: # Boolean `with_root` is auto-converted to {0, 1}
                                 self._extras[-1].append("")
                         else:
                             while len(self._extras) <= len(self._factors[0].word_ids): self._extras.append([])
@@ -183,11 +206,11 @@ class UDDataset:
                             if len(factor.word_ids): factor.word_ids[-1] = np.array(factor.word_ids[-1], np.int32)
                             factor.word_ids.append([])
                             factor.strings.append([])
-                            if factor.characters: factor.charseq_ids.append([])
+                            if factor.use_characters: factor.charseq_ids.append([])
                             if factor.with_root:
                                 factor.word_ids[-1].append(factor.ROOT)
                                 factor.strings[-1].append(factor.words[factor.ROOT])
-                                if factor.characters: factor.charseq_ids[-1].append(factor.ROOT)
+                                if factor.use_characters: factor.charseq_ids[-1].append(factor.ROOT)
 
                         word = columns[f]
                         factor.strings[-1].append(word)
@@ -197,7 +220,7 @@ class UDDataset:
                             word = _gen_lemma_rule(columns[self.FORMS], columns[self.LEMMAS], self._lr_allow_copy)
 
                         # Character-level information
-                        if factor.characters:
+                        if factor.use_characters:
                             if word not in factor.charseqs_map:
                                 factor.charseqs_map[word] = len(factor.charseqs)
                                 factor.charseqs.append([])
@@ -311,7 +334,7 @@ class UDDataset:
         # Character-level data
         batch_charseq_ids, batch_charseqs, batch_charseq_lens = [], [], []
         for factor in self._factors:
-            if not factor.characters:
+            if not factor.use_characters:
                 batch_charseq_ids.append([])
                 batch_charseqs.append([])
                 batch_charseq_lens.append([])
