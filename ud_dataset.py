@@ -147,7 +147,10 @@ class UDDataset:
             tokens.append('>')
             return ' '.join(tokens)
 
-    def __init__(self, filename, root_factors=[], embeddings=None, elmo=None, train=None, shuffle_batches=True, max_sentences=None):
+    def __init__(self, filename, root_factors=[], embeddings=None, elmo=None, train=None, shuffle_batches=True, max_sentences=None,
+        skip_incomplete_batches = False,
+        batch_size = None,
+    ):
         # Create factors
         self._factors = []
         print('Factors:')
@@ -276,6 +279,8 @@ class UDDataset:
             self._sentence_lens[i] = len(self._factors[self.FORMS].word_ids[i]) - self._factors[self.FORMS].with_root
 
         self._shuffle_batches = shuffle_batches
+        self.skip_incomplete_batches = skip_incomplete_batches
+        self.batch_size = batch_size
         self.reset_perm()
 
         if self._elmo:
@@ -311,7 +316,13 @@ class UDDataset:
         return count2freq
 
     def reset_perm(self):
-        self._permutation = np.random.permutation(len(self._sentence_lens)) if self._shuffle_batches else np.arange(len(self._sentence_lens))
+        n_sentences = len(self._sentence_lens)
+        self._permutation = np.random.permutation(n_sentences) if self._shuffle_batches else np.arange(n_sentences)
+        if self.skip_incomplete_batches and (n_sentences % self.batch_size) > 0:
+            n_sentences = n_sentences - (n_sentences % self.batch_size)
+            if not n_sentences:
+                raise ValueError('Not enough training data to use --skip-incomplete batches with given batch size.')
+            self._permutation = self._permutation[:n_sentences]
 
     def epoch_finished(self):
         if len(self._permutation) == 0:

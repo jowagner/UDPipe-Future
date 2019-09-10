@@ -378,7 +378,9 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", default="40:1e-3,20:1e-4", type=str, help="Epochs and learning rates.")
     parser.add_argument("--exp", default=None, type=str, help="Experiment name.")
     parser.add_argument("--label_smoothing", default=0.03, type=float, help="Label smoothing.")
+    parser.add_argument("--logdir", default=None, type=str, help="Model and log directory.")
     parser.add_argument("--min_epoch_batches", default=300, type=int, help="Minimum number of batches per epoch.")
+    parser.add_argument("--skip_incomplete_batches", default=False, action="store_true", help="Only use full batches.")
     parser.add_argument("--reset_epoch_perm", default=False, action="store_true", help="Start each epoch with a fresh permutation.")
     parser.add_argument("--parse", default=1, type=int, help="Parse.")
     parser.add_argument("--parser_layers", default=1, type=int, help="Parser layers.")
@@ -402,14 +404,15 @@ if __name__ == "__main__":
     if args.exp is None:
         args.exp = "{}-{}".format(os.path.basename(__file__), datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"))
 
-    # Create logdir name
-    do_not_log = {"exp", "predict", "predict_input", "predict_output", "tags", "threads"}
-    args.logdir = "logs/{}-{}".format(
-        args.exp,
-        ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), re.sub("^.*/", "", value) if type(value) == str else value)
-                  for key, value in sorted(vars(args).items()) if key not in do_not_log))
-    )
-    if not args.predict and not os.path.exists("logs"): os.mkdir("logs") # TF 1.6 will do this by itself
+    if args.logdir is None:
+        # Create logdir name
+        do_not_log = {"exp", "predict", "predict_input", "predict_output", "tags", "threads"}
+        args.logdir = "logs/{}-{}".format(
+            args.exp,
+            ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), re.sub("^.*/", "", value) if type(value) == str else value)
+                      for key, value in sorted(vars(args).items()) if key not in do_not_log))
+        )
+        if not args.predict and not os.path.exists("logs"): os.mkdir("logs") # TF 1.6 will do this by itself
 
     # Postprocess args
     args.tags = args.tags.split(",")
@@ -417,7 +420,7 @@ if __name__ == "__main__":
 
     # Load the data
     if args.embeddings:
-        with np.load(args.embeddings) as embeddings_npz:
+        with np.load(args.embeddings, allow_pickle=True) as embeddings_npz:
             args.embeddings_words = embeddings_npz["words"]
             args.embeddings_data = embeddings_npz["embeddings"]
             args.embeddings_size = args.embeddings_data.shape[1]
@@ -425,10 +428,14 @@ if __name__ == "__main__":
     root_factors = [ud_dataset.UDDataset.FORMS]
     if args.predict:
         train = ud_dataset.UDDataset("{}-ud-train.conllu".format(args.basename), root_factors,
+                                     skip_incomplete_batches = args.skip_incomplete_batches,
+                                     batch_size = args.batch_size,
                                      embeddings=args.embeddings_words if args.embeddings else None)
         test = ud_dataset.UDDataset(args.predict_input, root_factors, train=train, shuffle_batches=False, elmo=args.elmo)
     else:
         train = ud_dataset.UDDataset("{}-ud-train.conllu".format(args.basename), root_factors,
+                                     skip_incomplete_batches = args.skip_incomplete_batches,
+                                     batch_size = args.batch_size,
                                      embeddings=args.embeddings_words if args.embeddings else None,
                                      elmo=re.sub("(?=,|$)", "-train.npz", args.elmo) if args.elmo else None)
         if os.path.exists("{}-ud-dev.conllu".format(args.basename)):
