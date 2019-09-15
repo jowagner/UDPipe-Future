@@ -90,6 +90,9 @@ def _apply_lemma_rule(form, lemma_rule):
 
     for rule in casing.split("¦"):
         if rule == "↓0": continue # The lemma is lowercased initially
+        if len(rule) < 2:
+            print('Skipping ill-formed lemma casing rule %r\n' %rule)
+            continue
         case, offset = rule[0], int(rule[1:])
         lemma = lemma[:offset] + (lemma[offset:].upper() if case == "↑" else lemma[offset:].lower())
 
