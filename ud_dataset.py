@@ -367,6 +367,8 @@ class UDDataset:
             fields = []
             fields.append(str(i + 1))
             for f in range(self.FACTORS):
+                if f == self.EXTRA:
+                    continue
                 factor = self._factors[f]
                 offset = i + factor.with_root
 
