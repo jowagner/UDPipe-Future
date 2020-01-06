@@ -115,9 +115,10 @@ class UDDataset:
     DEPREL = 6
     DEPS = 7
     MISC = 8
-    FACTORS = 9
-    EMBEDDINGS = 9
-    ELMO = 10
+    EXTRA = 9
+    FACTORS = 10
+    EMBEDDINGS = 10
+    ELMO = 11
 
     FACTORS_MAP = {"FORMS": FORMS, "LEMMAS": LEMMAS, "UPOS": UPOS, "XPOS": XPOS, "FEATS": FEATS,
                    "HEAD": HEAD, "DEPREL": DEPREL, "DEPS": DEPS, "MISC": MISC}
@@ -203,7 +204,14 @@ class UDDataset:
                                 factor.strings[-1].append(factor.words[factor.ROOT])
                                 if factor.characters: factor.charseq_ids[-1].append(factor.ROOT)
 
-                        word = columns[f]
+                        if f == self.EXTRA:
+                            word = 'n/a'
+                            for misc_field in columns[self.MISC].split('|'):
+                                if misc_field.startswith('ExtraInput='):
+                                    word = misc_field.split('=')[1]
+                                    break
+                        else:
+                            word = columns[f]
                         factor.strings[-1].append(word)
 
                         # Preprocess word

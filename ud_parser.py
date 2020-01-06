@@ -40,6 +40,7 @@ class Network:
             self.tags = dict((tag, tf.placeholder(tf.int32, [None, None])) for tag in args.tags)
             self.heads = tf.placeholder(tf.int32, [None, None])
             self.deprels = tf.placeholder(tf.int32, [None, None])
+            self.extra_ids = tf.placeholder(tf.int32, [None, None])
             self.is_training = tf.placeholder(tf.bool, [])
             self.learning_rate = tf.placeholder(tf.float32, [])
 
@@ -80,6 +81,11 @@ class Network:
             # Contextualized embeddings
             if args.elmo_size:
                 inputs.append(self.elmo)
+
+            # Extra input embeddings
+            if args.extra_input and args.extra_input_dim:
+                extra_embeddings = tf.get_variable("extra_embeddings", shape=[num_words, args.extra_input_dim], dtype=tf.float32)
+                inputs.append(tf.nn.embedding_lookup(extra_embeddings, self.extra_ids))
 
             # All inputs done
             inputs = tf.concat(inputs, axis=2)
@@ -375,6 +381,8 @@ if __name__ == "__main__":
     parser.add_argument("--embeddings", default=None, type=str, help="External embeddings to use.")
     parser.add_argument("--epochs", default="40:1e-3,20:1e-4", type=str, help="Epochs and learning rates.")
     parser.add_argument("--exp", default=None, type=str, help="Experiment name.")
+    parser.add_argument("--extra_input", default=False, action="store_true", help="Read ExtraInput=... from MISC column.")
+    parser.add_argument("--extra_input_dim", default=12, type=int, help="Extra input embedding dimension.")
     parser.add_argument("--label_smoothing", default=0.03, type=float, help="Label smoothing.")
     parser.add_argument("--logdir", default=None, type=str, help="Model and log directory.")
     parser.add_argument("--max_sentence_len", default=200, type=int, help="Max sentence length.")
@@ -426,6 +434,8 @@ if __name__ == "__main__":
             args.embeddings_size = args.embeddings_data.shape[1]
 
     root_factors = [ud_dataset.UDDataset.FORMS]
+    if args.extra_input:
+        root_factors.append(ud_dataset.UDDataset.EXTRA)
     if args.predict:
         train = ud_dataset.UDDataset("{}-ud-train.conllu".format(args.basename), root_factors,
                                      max_sentence_len=args.max_sentence_len,
