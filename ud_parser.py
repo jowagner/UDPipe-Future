@@ -27,7 +27,7 @@ class Network:
                                                                        intra_op_parallelism_threads=threads,
                                                                        allow_soft_placement=True))
 
-    def construct(self, args, num_words, num_chars, num_tags, num_deprels, predict_only):
+    def construct(self, args, num_words, num_chars, num_tags, num_deprels, predict_only, num_extra_values):
         with self.session.graph.as_default():
             # Inputs
             self.sentence_lens = tf.placeholder(tf.int32, [None])
@@ -40,7 +40,10 @@ class Network:
             self.tags = dict((tag, tf.placeholder(tf.int32, [None, None])) for tag in args.tags)
             self.heads = tf.placeholder(tf.int32, [None, None])
             self.deprels = tf.placeholder(tf.int32, [None, None])
-            self.extra_ids = tf.placeholder(tf.int32, [None, None])
+            if args.extra_input and args.extra_input_dim and num_extra_values > 1:
+                self.extra_ids = tf.placeholder(tf.int32, [None, None])
+            else:
+                self.extra_ids = None
             self.is_training = tf.placeholder(tf.bool, [])
             self.learning_rate = tf.placeholder(tf.float32, [])
 
@@ -83,8 +86,8 @@ class Network:
                 inputs.append(self.elmo)
 
             # Extra input embeddings
-            if args.extra_input and args.extra_input_dim:
-                extra_embeddings = tf.get_variable("extra_embeddings", shape=[num_words, args.extra_input_dim], dtype=tf.float32)
+            if args.extra_input and args.extra_input_dim and num_extra_values > 1:
+                extra_embeddings = tf.get_variable("extra_embeddings", shape=[num_extra_values, args.extra_input_dim], dtype=tf.float32)
                 inputs.append(tf.nn.embedding_lookup(extra_embeddings, self.extra_ids))
 
             # All inputs done
@@ -269,6 +272,8 @@ class Network:
                 feeds = {self.is_training: True, self.learning_rate: learning_rate, self.sentence_lens: sentence_lens,
                          self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
                          self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS]}
+                if self.extra_ids is not None:
+                    feeds[self.extra_ids] = word_ids[train.EXTRA]
                 if args.embeddings:
                     if args.word_dropout:
                         mask = np.random.binomial(n=1, p=args.word_dropout, size=word_ids[train.EMBEDDINGS].shape)
@@ -301,6 +306,8 @@ class Network:
             feeds = {self.is_training: False, self.sentence_lens: sentence_lens,
                      self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
                      self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS]}
+            if self.extra_ids is not None:
+                feeds[self.extra_ids] = word_ids[train.EXTRA]
             if args.embeddings:
                 embeddings = np.zeros([word_ids[train.EMBEDDINGS].shape[0], word_ids[train.EMBEDDINGS].shape[1], args.embeddings_size])
                 for i in range(embeddings.shape[0]):
@@ -462,7 +469,8 @@ if __name__ == "__main__":
             networks.append(Network(threads=args.threads, seed=args.seed))
             networks[-1].construct(args, len(train.factors[train.FORMS].words), len(train.factors[train.FORMS].alphabet),
                                    dict((tag, len(train.factors[train.FACTORS_MAP[tag]].words)) for tag in args.tags),
-                                   len(train.factors[train.DEPREL].words), predict_only=args.predict)
+                                   len(train.factors[train.DEPREL].words), predict_only=args.predict,
+                                   num_extra_values = len(train.factors[train.EXTRA].words))
             networks[-1].saver_inference.restore(networks[-1].session, checkpoint)
 
         with open(args.predict_output, "w", encoding="utf-8") as output_file:
@@ -475,6 +483,8 @@ if __name__ == "__main__":
                     feeds = {network.is_training: False, network.sentence_lens: sentence_lens,
                              network.charseqs: charseqs[train.FORMS], network.charseq_lens: charseq_lens[train.FORMS],
                              network.word_ids: word_ids[train.FORMS], network.charseq_ids: charseq_ids[train.FORMS]}
+                    if network.extra_ids is not None:
+                        feeds[network.word_ids] = word_ids[train.EXTRA]
                     if args.embeddings:
                         embeddings = np.zeros([word_ids[train.EMBEDDINGS].shape[0], word_ids[train.EMBEDDINGS].shape[1], args.embeddings_size])
                         for i in range(embeddings.shape[0]):
@@ -531,7 +541,8 @@ if __name__ == "__main__":
     network = Network(threads=args.threads, seed=args.seed)
     network.construct(args, len(train.factors[train.FORMS].words), len(train.factors[train.FORMS].alphabet),
                       dict((tag, len(train.factors[train.FACTORS_MAP[tag]].words)) for tag in args.tags),
-                      len(train.factors[train.DEPREL].words), predict_only=args.predict)
+                      len(train.factors[train.DEPREL].words), predict_only=args.predict,
+                      num_extra_values = len(train.factors[train.EXTRA].words))
 
     if args.checkpoint:
         saver = network.saver_train if args.predict is None else network.saver_inference
