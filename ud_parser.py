@@ -86,7 +86,7 @@ class Network:
                 inputs.append(self.elmo)
 
             # Extra input embeddings
-            if args.extra_input and args.extra_input_dim and num_extra_values > 1:
+            if self.extra_ids is not None:
                 extra_embeddings = tf.get_variable("extra_embeddings", shape=[num_extra_values, args.extra_input_dim], dtype=tf.float32)
                 inputs.append(tf.nn.embedding_lookup(extra_embeddings, self.extra_ids))
 
