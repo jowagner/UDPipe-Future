@@ -141,7 +141,7 @@ class UDDataset:
                 self.charseqs = [[0], [1], [2]]
                 self.charseq_ids = []
 
-    def __init__(self, filename, root_factors=[], embeddings=None, elmo=None, train=None, shuffle_batches=True, max_sentence_len=None, max_sentences=None):
+    def __init__(self, filename, root_factors=[], embeddings=None, elmo=None, train=None, shuffle_batches=True, max_sentence_len=None, max_sentences=None, extra_input_key = None):
         # Create factors
         self._factors = []
         for f in range(self.FACTORS):
@@ -171,6 +171,7 @@ class UDDataset:
         self._elmo_size = self._elmo[0].shape[1] if self._elmo else 0
 
         # Load the sentences
+        extra_input_default_value = None
         with open(filename, "r", encoding="utf-8") as file:
             in_sentence = False
             for line in file:
@@ -186,6 +187,10 @@ class UDDataset:
                             while len(self._extras) <= len(self._factors[0].word_ids): self._extras.append([])
                             if not len(self._extras[-1]): self._extras[-1].append("")
                         self._extras[-1][-1] += ("\n" if self._extras[-1][-1] else "") + line
+                        if extra_input_key and line.startswith('#') and '=' in line:
+                            comment_key, comment_value = line[1:].split('=',1)
+                            if comment_key.strip() == extra_input_key:
+                                extra_input_default_value = comment_value.strip()
                         continue
 
                     if max_sentence_len and in_sentence and len(self._factors[0].strings[-1]) - self._factors[0].with_root >= max_sentence_len:
@@ -205,11 +210,13 @@ class UDDataset:
                                 if factor.characters: factor.charseq_ids[-1].append(factor.ROOT)
 
                         if f == self.EXTRA:
-                            word = 'n/a'
+                            word = extra_input_default_value if extra_input_default_value else '<unk>'
                             for misc_field in columns[self.MISC].split('|'):
-                                if misc_field.startswith('ExtraInput='):
-                                    word = misc_field.split('=')[1]
-                                    break
+                                if '=' in misc_field:
+                                    misc_key, misc_value = misc_field.split('=',1)
+                                    if misc_key.strip() == extra_input_key:
+                                        word = misc_value.strip()
+                                        break
                         else:
                             word = columns[f]
                         factor.strings[-1].append(word)

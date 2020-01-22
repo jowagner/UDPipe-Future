@@ -388,7 +388,7 @@ if __name__ == "__main__":
     parser.add_argument("--embeddings", default=None, type=str, help="External embeddings to use.")
     parser.add_argument("--epochs", default="40:1e-3,20:1e-4", type=str, help="Epochs and learning rates.")
     parser.add_argument("--exp", default=None, type=str, help="Experiment name.")
-    parser.add_argument("--extra_input", default=False, action="store_true", help="Read ExtraInput=... from MISC column.")
+    parser.add_argument("--extra_input", default=None, type=str, help="Read extra input with this key from MISC column and comments.")
     parser.add_argument("--extra_input_dim", default=12, type=int, help="Extra input embedding dimension.")
     parser.add_argument("--label_smoothing", default=0.03, type=float, help="Label smoothing.")
     parser.add_argument("--logdir", default=None, type=str, help="Model and log directory.")
@@ -446,20 +446,25 @@ if __name__ == "__main__":
     if args.predict:
         train = ud_dataset.UDDataset("{}-ud-train.conllu".format(args.basename), root_factors,
                                      max_sentence_len=args.max_sentence_len,
-                                     embeddings=args.embeddings_words if args.embeddings else None)
-        test = ud_dataset.UDDataset(args.predict_input, root_factors, train=train, shuffle_batches=False, elmo=args.elmo)
+                                     embeddings=args.embeddings_words if args.embeddings else None,
+                                     extra_input_key = args.extra_input)
+        test = ud_dataset.UDDataset(args.predict_input, root_factors, train=train, shuffle_batches=False, elmo=args.elmo,
+                                    extra_input_key = args.extra_input)
     else:
         train = ud_dataset.UDDataset("{}-ud-train.conllu".format(args.basename), root_factors,
                                      max_sentence_len=args.max_sentence_len,
                                      embeddings=args.embeddings_words if args.embeddings else None,
-                                     elmo=re.sub("(?=,|$)", "-train.npz", args.elmo) if args.elmo else None)
+                                     elmo=re.sub("(?=,|$)", "-train.npz", args.elmo) if args.elmo else None,
+                                     extra_input_key = args.extra_input)
         if os.path.exists("{}-ud-dev.conllu".format(args.basename)):
             dev = ud_dataset.UDDataset("{}-ud-dev.conllu".format(args.basename), root_factors, train=train, shuffle_batches=False,
-                                       elmo=re.sub("(?=,|$)", "-dev.npz", args.elmo) if args.elmo else None)
+                                       elmo=re.sub("(?=,|$)", "-dev.npz", args.elmo) if args.elmo else None,
+                                       extra_input_key = args.extra_input)
         else:
             dev = None
         test = ud_dataset.UDDataset("{}-ud-test.conllu".format(args.basename), root_factors, train=train, shuffle_batches=False,
-                                    elmo=re.sub("(?=,|$)", "-test.npz", args.elmo) if args.elmo else None)
+                                    elmo=re.sub("(?=,|$)", "-test.npz", args.elmo) if args.elmo else None,
+                                    extra_input_key = args.extra_input)
     args.elmo_size = test.elmo_size
 
     # Ugly ensembling during prediction; should be refactored and merged with Network.predict
